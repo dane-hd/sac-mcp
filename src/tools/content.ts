@@ -272,10 +272,10 @@ WORKSPACE / TEAM FILES: To list all workspaces (team files spaces), filter by fo
     },
   );
 
-  // ── GET /api/v1/widgetquery/getWidgetData ───────────────────────
+  // ── GET /widgetquery/getWidgetData (tenant root, no /api/v1) ───────────────────────
   server.tool(
     "sac_widget_get_data",
-    "Get widget data from a story.",
+    "Get the value of a numeric-point chart in a story (SAP Mobile Start KPI tile format). Uses the story's saved filters; no filter can be passed. Other chart types return WIDGET_TYPE_NOT_SUPPORTED.",
     {
       storyId: z.string().describe("Story ID"),
       widgetId: z.string().describe("Widget ID"),
@@ -285,7 +285,7 @@ WORKSPACE / TEAM FILES: To list all workspaces (team files spaces), filter by fo
       try {
         const cfg = getConfig();
         const qs = buildODataQuery({ storyId, widgetId, type });
-        const result = await sacGet(cfg, `/api/v1/widgetquery/getWidgetData${qs}`);
+        const result = await sacGet(cfg, `/widgetquery/getWidgetData${qs}`);
         return toolSuccess(result);
       } catch (err) {
         return toolError(err);
