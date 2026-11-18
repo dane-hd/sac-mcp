@@ -1,6 +1,7 @@
 node_modules/
 build/
 .env
+.env.*
 mcp_config.json
 .DS_Store
 start_agent.ps1

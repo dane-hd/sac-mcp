@@ -9,7 +9,9 @@
  *
  * Session management (per SAP docs):
  *   - A cookie store must be maintained across API calls.
- *   - x-sap-sac-custom-auth: true  is required on every API request.
+ *   - No x-sap-sac-custom-auth header: it belongs to the client-credentials
+ *     flow, and SAC answers 500 when it comes with a user (authorization
+ *     code) token.
  *   - Write ops (POST/PUT/PATCH/DELETE) require a CSRF token obtained
  *     via GET /api/v1/csrf with header  x-csrf-token: fetch.
  *   - The CSRF token and session cookies must travel together.
@@ -123,7 +125,6 @@ let csrfExpiresAt = 0; // epoch ms
  *   GET <tenant-url>/api/v1/csrf
  *   Headers:
  *     Authorization: Bearer <Access_Token>
- *     x-sap-sac-custom-auth: true
  *     x-csrf-token: fetch
  *   The token is returned in the  x-csrf-token  response header.
  *   Session cookies are set via Set-Cookie and must be stored.
@@ -136,7 +137,6 @@ async function fetchCsrfToken(cfg: SacClientConfig): Promise<string> {
     method: "GET",
     headers: {
       Authorization: `Bearer ${bearer}`,
-      "x-sap-sac-custom-auth": "true",
       "x-csrf-token": "fetch",
       ...(cookies ? { Cookie: cookies } : {}),
     },
@@ -193,7 +193,6 @@ export function resetSession(): void {
 /**
  * Headers required on every SAC API request (per official docs):
  *   Authorization: Bearer <Access_Token>
- *   x-sap-sac-custom-auth: true
  *   Cookie: <session cookies>
  */
 async function baseHeaders(
@@ -203,7 +202,6 @@ async function baseHeaders(
   const cookies = cookieHeader();
   return {
     Authorization: `Bearer ${bearer}`,
-    "x-sap-sac-custom-auth": "true",
     ...(cookies ? { Cookie: cookies } : {}),
   };
 }
@@ -212,8 +210,8 @@ async function baseHeaders(
  * Headers for write operations — adds CSRF token on top of base headers.
  *
  * SAP docs: "you can make POST, PUT, and DELETE requests to the API,
- * so long as you continue to include the Authorization, x-csrf-token,
- * and x-sap-sac-custom-auth HTTP headers"
+ * so long as you continue to include the Authorization and x-csrf-token
+ * HTTP headers" (the x-sap-sac-custom-auth header is left out, see top).
  */
 async function writeHeaders(
   cfg: SacClientConfig,

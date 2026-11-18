@@ -34,7 +34,7 @@ export function registerSmartQueryTool(server: McpServer): void {
                     if (analysis.target.includes(':')) {
                         const [storyId, widgetId] = analysis.target.split(':');
                         try {
-                            const result = await sacGet(cfg, `/api/v1/widgetquery/getWidgetData?storyId=${storyId}&widgetId=${widgetId}`);
+                            const result = await sacGet(cfg, `/widgetquery/getWidgetData?storyId=${storyId}&widgetId=${widgetId}&type=kpiTile`);
                             return toolSuccess(result, metadata);
                         } catch (err) {
                             console.warn("Analytical route failed, falling back to relational...", err);
