@@ -102,6 +102,8 @@ interface AgentConfig {
     SAC_TOKEN_URL?: string;
     SAC_CLIENT_ID?: string;
     SAC_CLIENT_SECRET?: string;
+    SAC_AUTHORIZE_URL?: string;
+    SAC_REDIRECT_URI?: string;
   };
   aicore?: {
     AICORE_CLIENT_ID?: string;
@@ -143,10 +145,9 @@ async function main(): Promise<void> {
 
   // 2. Hydrate Env Vars from Config (if not already set)
   if (agentConfig.sac) {
-    if (!process.env.SAC_BASE_URL && agentConfig.sac.SAC_BASE_URL) process.env.SAC_BASE_URL = agentConfig.sac.SAC_BASE_URL;
-    if (!process.env.SAC_TOKEN_URL && agentConfig.sac.SAC_TOKEN_URL) process.env.SAC_TOKEN_URL = agentConfig.sac.SAC_TOKEN_URL;
-    if (!process.env.SAC_CLIENT_ID && agentConfig.sac.SAC_CLIENT_ID) process.env.SAC_CLIENT_ID = agentConfig.sac.SAC_CLIENT_ID;
-    if (!process.env.SAC_CLIENT_SECRET && agentConfig.sac.SAC_CLIENT_SECRET) process.env.SAC_CLIENT_SECRET = agentConfig.sac.SAC_CLIENT_SECRET;
+    for (const [key, value] of Object.entries(agentConfig.sac)) {
+      if (!process.env[key] && value) process.env[key] = value;
+    }
   }
 
   if (providerName === "genaicore" && agentConfig.aicore) {

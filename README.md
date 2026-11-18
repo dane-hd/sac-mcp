@@ -1,10 +1,12 @@
-# [SAP Analytics Cloud MCP Server](https://github.com/JumenEngels/sap_analytics_cloud_mcp)
+# [SAP Analytics Cloud MCP Server](https://github.com/dane-hd/sac-mcp)
+
+Forked from [JumenEngels/sap_analytics_cloud_mcp](https://github.com/JumenEngels/sap_analytics_cloud_mcp).
 
 An [MCP](https://modelcontextprotocol.io/) (Model Context Protocol) server that exposes the SAP Analytics Cloud REST API as 90 tools consumable by any MCP-compatible client (Custom Agent, Claude Desktop, Claude Code, Cursor, etc.).
 
 ## What it does
 
-The server authenticates against an SAC tenant using OAuth 2.0 Client Credentials and manages CSRF tokens and session cookies automatically. It then exposes the full SAC REST API surface as discrete MCP tools grouped into 11 service areas:
+Each person signs in to SAC as themselves with corporate SSO (OAuth 2.0 Authorization Code grant), so every call runs with that person's SAC permissions. The server manages tokens, refresh, CSRF tokens and session cookies automatically. It then exposes the full SAC REST API surface as discrete MCP tools grouped into 11 service areas:
 
 | Module | Tools | Covers |
 |---|---|---|
@@ -20,30 +22,47 @@ The server authenticates against an SAC tenant using OAuth 2.0 Client Credential
 | Translation | 4 | Artifact metadata, XLIFF download (single + bulk) |
 | Smart Query | 1 | Intelligent routing (Relational vs Analytical) |
 
-Plus a `ping` connectivity check tool (90 total), and **Prompt** support for guided workflows.
+Plus a `ping` connectivity check tool, `sac_login` / `sac_logout` sign-in tools, and **Prompt** support for guided workflows.
 
 
 ## Prerequisites
 
 - **Node.js >= 18.0** (required for native `fetch` and `Headers.getSetCookie`)
 - **npm**
-- An SAP Analytics Cloud tenant with an OAuth client (see below).
+- An SAP Analytics Cloud tenant with an Authorization Code OAuth client (see below).
+- A browser on the same machine as the server, for the SSO sign-in.
 
-### SAC Tenant Setup
+### SAC Tenant Setup (admin, once per tenant)
 
 1. Open your SAC tenant and go to **System > Administration > App Integration > Add a New OAuth Client**.
-2. Set the purpose to **Interactive Usage and API Access**.
-3. Note down the following four values:
+2. Set **Purpose** to **Interactive Usage**.
+3. Set **Authorization Grant** to **Authorization Code**, keep it **Confidential**, and enter a **Secret**.
+4. Set **Redirect URI** to `http://localhost:8765/callback` (or the value you will put in `SAC_REDIRECT_URI`; it must match exactly).
+5. Set **Token Lifetime** and **Refresh Token Lifetime**. The refresh token lifetime is how long a user stays signed in before SSO is needed again.
+6. Note down these values (the URLs are listed at the top of the App Integration page):
    - **Base URL** -- `https://<tenant>.<datacenter>.sapanalytics.cloud`
-   - **Token URL** -- shown on the OAuth client detail page
+   - **Token URL**
+   - **Authorization URL**
    - **Client ID**
    - **Client Secret**
+
+The Client ID and Secret only identify this app to SAC. They grant nothing on their own: data access comes from the person who signs in.
+
+### Sign in (each user)
+
+Put the variables from the Configuration section in a `.env` file in the repo root (it is gitignored), then:
+
+```bash
+node --env-file=.env build/index.js login
+```
+
+A browser window opens at your SAC tenant, which hands you to the corporate IdP for SSO. After you sign in, the tokens are stored in your user profile under `~/.sac-mcp/` and refreshed silently. If you skip this step, the first SAC tool call opens the browser for you and asks you to retry; the `sac_login` tool does the same and waits. `node build/index.js logout` (or `sac_logout`) deletes the stored tokens.
 
 ## Installation & Build
 
 ```bash
-git clone https://github.com/JumenEngels/sap_analytics_cloud_mcp
-cd sap_analytics_cloud_mcp
+git clone https://github.com/dane-hd/sac-mcp
+cd sac-mcp
 npm install
 npm run build
 ```
@@ -80,14 +99,16 @@ The client will automatically load all necessary configuration (both for the LLM
 
 If you are using **Claude Desktop**, **Cursor**, or another MCP client, you need to configure the server environment variables directly.
 
-The server reads four required environment variables at runtime:
+The server reads these environment variables at runtime:
 
-| Variable | Description | Example |
-|---|---|---|
-| `SAC_BASE_URL` | Tenant root URL (no trailing slash) | `https://mytenant.eu10.sapanalytics.cloud` |
-| `SAC_TOKEN_URL` | OAuth token endpoint | `https://mytenant.authentication.eu10.hana.ondemand.com/oauth/token` |
-| `SAC_CLIENT_ID` | OAuth Client ID | `sb-abc123-def456` |
-| `SAC_CLIENT_SECRET` | OAuth Client Secret | `AbC123...` |
+| Variable | Required | Description | Example |
+|---|---|---|---|
+| `SAC_BASE_URL` | yes | Tenant root URL | `https://mytenant.eu10.sapanalytics.cloud` |
+| `SAC_TOKEN_URL` | yes | OAuth token endpoint | `https://mytenant.authentication.eu10.hana.ondemand.com/oauth/token` |
+| `SAC_CLIENT_ID` | yes | Client ID of the Authorization Code OAuth client | `sb-abc123-def456` |
+| `SAC_CLIENT_SECRET` | yes | Secret of that OAuth client | `AbC123...` |
+| `SAC_AUTHORIZE_URL` | no | Authorization URL. Default: `SAC_TOKEN_URL` with `/oauth/token` replaced by `/oauth/authorize` | `https://mytenant.authentication.eu10.hana.ondemand.com/oauth/authorize` |
+| `SAC_REDIRECT_URI` | no | Redirect URI registered on the OAuth client. Must be on `localhost`. Default: `http://localhost:8765/callback` | |
 
 ### MCP Client Configuration
 
@@ -101,7 +122,7 @@ npm run setup
 This creates an `mcp_config.json` file in the project root. fill in your SAC credentials there and copy the content to your Claude Desktop config file.
 
 #### Cursor / Other Clients
-Add the server with the command `node build/index.js` and set the 4 environment variables in the client's configuration UI.
+Add the server with the command `node build/index.js` and set the environment variables above in the client's configuration UI.
 
 ## Smart Query
 

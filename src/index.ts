@@ -12,6 +12,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { registerTools } from "./tools/index.js";
 import { registerResources } from "./resources/index.js";
 import { registerPrompts } from "./prompts/index.js";
+import { signIn } from "./tools/auth.js";
+import { getConfig } from "./tools/_helpers.js";
+import { logout } from "./auth/sac-client.js";
 
 // ── Server metadata ────────────────────────────────────────────────
 const SERVER_NAME = "sac-mcp-server";
@@ -42,7 +45,21 @@ async function main(): Promise<void> {
   console.error(`${SERVER_NAME} v${SERVER_VERSION} running on stdio`);
 }
 
-main().catch((error) => {
-  console.error("Fatal error starting MCP server:", error);
+/** `sac-mcp-server login|logout` — sign in or out from a terminal. */
+async function cli(command: "login" | "logout"): Promise<void> {
+  if (command === "login") {
+    const who = await signIn();
+    console.error(`Signed in to SAC as ${who.email ?? who.user ?? "unknown user"}.`);
+  } else {
+    logout(getConfig());
+    console.error("Signed out of SAC.");
+  }
+  process.exit(0);
+}
+
+const command = process.argv[2];
+(command === "login" || command === "logout" ? cli(command) : main()).catch((error) => {
+  if (command) console.error(`${command} failed: ${error instanceof Error ? error.message : error}`);
+  else console.error("Fatal error starting MCP server:", error);
   process.exit(1);
 });

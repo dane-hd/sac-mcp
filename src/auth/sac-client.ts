@@ -1,30 +1,11 @@
 /**
  * SAC API client
  *
- * Handles OAuth 2.0 authentication and all HTTP interactions with the
- * SAP Analytics Cloud REST API, including CSRF token management.
+ * All HTTP interactions with the SAP Analytics Cloud REST API.
  *
- * Authentication methods supported by SAC (official docs):
- *
- *   1. OAuth 2.0 SAML Bearer Assertion (2-legged)
- *      For apps deployed on SAP BTP using the BTP SDK.
- *      Requires a SAML assertion signed by a Trusted IdP.
- *
- *   2. OAuth 2.0 Client Credentials Grant (2-legged)
- *      For non-browser, technical-user access to the REST API.
- *
- *   3. OAuth 2.0 Authorization Code Grant (3-legged)
- *      For non-browser apps acting on behalf of a named user.
- *
- *   4. Basic Authentication Against the Token Service  ← used here
- *      Simplest option.  Recommended for dev/automation and SCIM.
- *      POST to Token URL with:
- *        URL param:  ?grant_type=client_credentials
- *        Header:     Authorization: Basic Base64(<ClientID>:<Secret>)
- *      Returns:      { access_token, token_type, expires_in }
- *
- * This module implements method 4 (Basic Auth against Token Service).
- * The access_token is then used as a Bearer token on all API calls.
+ * Authentication: OAuth 2.0 Authorization Code Grant (3-legged), so each
+ * person signs in with their own SAC account through corporate SSO and
+ * every call runs with that person's permissions. See ./user-login.ts.
  *
  * Session management (per SAP docs):
  *   - A cookie store must be maintained across API calls.
@@ -34,20 +15,30 @@
  *   - The CSRF token and session cookies must travel together.
  *
  * Environment variables:
- *   SAC_BASE_URL      – https://<tenant>.<dc>.sapanalytics.cloud
- *   SAC_TOKEN_URL     – Token URL from SAC Admin > App Integration
- *   SAC_CLIENT_ID     – OAuth Client ID registered in SAC
- *   SAC_CLIENT_SECRET – OAuth Client Secret registered in SAC
+ *   SAC_BASE_URL       – https://<tenant>.<dc>.sapanalytics.cloud
+ *   SAC_TOKEN_URL      – Token URL from SAC Admin > App Integration
+ *   SAC_AUTHORIZE_URL  – Authorization URL from the same page
+ *                        (default: SAC_TOKEN_URL with /oauth/token -> /oauth/authorize)
+ *   SAC_CLIENT_ID      – Client ID of the Authorization Code OAuth client
+ *   SAC_CLIENT_SECRET  – Secret of that OAuth client
+ *   SAC_REDIRECT_URI   – Redirect URI registered on that OAuth client
+ *                        (default: http://localhost:8765/callback)
  */
+
+import {
+  getUserAccessToken,
+  identityGeneration,
+  signOut,
+  type OAuthConfig,
+} from "./user-login.js";
 
 // ── Configuration ──────────────────────────────────────────────────
 
-export interface SacClientConfig {
+export interface SacClientConfig extends OAuthConfig {
   baseUrl: string;
-  tokenUrl: string;
-  clientId: string;
-  clientSecret: string;
 }
+
+export const DEFAULT_REDIRECT_URI = "http://localhost:8765/callback";
 
 /** Read config from environment variables. */
 export function configFromEnv(): SacClientConfig {
@@ -57,65 +48,41 @@ export function configFromEnv(): SacClientConfig {
     return val;
   };
 
+  const tokenUrl = required("SAC_TOKEN_URL");
   return {
-    baseUrl: required("SAC_BASE_URL"),
-    tokenUrl: required("SAC_TOKEN_URL"),
+    baseUrl: required("SAC_BASE_URL").replace(/\/+$/, ""),
+    tokenUrl,
+    authorizeUrl:
+      process.env.SAC_AUTHORIZE_URL ||
+      tokenUrl.replace(/\/oauth\/token(\?.*)?$/, "/oauth/authorize"),
     clientId: required("SAC_CLIENT_ID"),
     clientSecret: required("SAC_CLIENT_SECRET"),
+    redirectUri: process.env.SAC_REDIRECT_URI || DEFAULT_REDIRECT_URI,
   };
 }
 
-// ── Bearer token cache ─────────────────────────────────────────────
+// ── Bearer token ───────────────────────────────────────────────────
 
-let cachedToken: string | null = null;
-let tokenExpiresAt = 0; // epoch ms
+/** Identity generation the cached CSRF token and cookies belong to. */
+let sessionGeneration = identityGeneration;
 
 /**
- * Obtain (or return cached) Bearer token.
- *
- * Uses "Basic Authentication Against the Token Service" (SAP docs):
- *   POST <tokenUrl>?grant_type=client_credentials
- *   Authorization: Basic Base64(<ClientID>:<Secret>)
- *   → { access_token, token_type, expires_in }
+ * Access token of the signed-in user. When the user changes (sign-in or
+ * sign-out), drop the CSRF token and cookies of the previous session.
  */
 export async function getAccessToken(cfg: SacClientConfig): Promise<string> {
-  // Return cached token if still valid (with 60 s safety margin)
-  if (cachedToken && Date.now() < tokenExpiresAt - 60_000) {
-    return cachedToken;
+  const token = await getUserAccessToken(cfg);
+  if (sessionGeneration !== identityGeneration) {
+    resetSession();
+    sessionGeneration = identityGeneration;
   }
+  return token;
+}
 
-  // SAP docs: "include the URL parameter ?grant_type=client_credentials"
-  const url = cfg.tokenUrl.includes("?")
-    ? `${cfg.tokenUrl}&grant_type=client_credentials`
-    : `${cfg.tokenUrl}?grant_type=client_credentials`;
-
-  // SAP docs: "Authorization: Basic Base64-encoding-of-<OAuthClientID>:<Secret>"
-  const credentials = Buffer.from(
-    `${cfg.clientId}:${cfg.clientSecret}`,
-  ).toString("base64");
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${credentials}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Token request failed (${res.status}): ${text}`);
-  }
-
-  const json = (await res.json()) as {
-    access_token: string;
-    expires_in?: number;
-  };
-
-  cachedToken = json.access_token;
-  tokenExpiresAt = Date.now() + (json.expires_in ?? 3600) * 1000;
-
-  return cachedToken;
+/** Sign the user out and clear all session state. */
+export function logout(cfg: SacClientConfig): void {
+  signOut(cfg);
+  resetSession();
 }
 
 // ── Session cookie jar ─────────────────────────────────────────────
@@ -187,7 +154,7 @@ async function fetchCsrfToken(cfg: SacClientConfig): Promise<string> {
     );
   }
 
-  console.log(`[SAC] Acquired CSRF token. Session cookies: ${cookieJar.size}`);
+  console.error(`[SAC] Acquired CSRF token. Session cookies: ${cookieJar.size}`);
   return csrfToken;
 }
 
@@ -208,16 +175,14 @@ async function getCsrf(cfg: SacClientConfig): Promise<string> {
 
 /** Invalidate the cached CSRF so the next write re-fetches. */
 export function invalidateCsrf(): void {
-  console.log("[SAC] Invalidating CSRF token and clearing session cookies");
+  console.error("[SAC] Invalidating CSRF token and clearing session cookies");
   cachedCsrf = null;
   csrfExpiresAt = 0;
   cookieJar.clear(); // Force fresh session
 }
 
-/** Reset all cached state (token, CSRF, cookies). */
+/** Reset session state (CSRF token, cookies). */
 export function resetSession(): void {
-  cachedToken = null;
-  tokenExpiresAt = 0;
   cachedCsrf = null;
   csrfExpiresAt = 0;
   cookieJar = new Map();
