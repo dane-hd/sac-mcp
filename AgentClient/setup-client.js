@@ -13,7 +13,8 @@ const configContent = {
         "SAC_BASE_URL": "https://<tenant>.sapanalytics.cloud",
         "SAC_TOKEN_URL": "https://<tenant>.authentication.../oauth/token",
         "SAC_CLIENT_ID": "sb-...",
-        "SAC_CLIENT_SECRET": "..."
+        "SAC_CLIENT_SECRET": "...",
+        "SAC_REDIRECT_URI": "http://localhost:8765/callback"
     },
     "aicore": {
         "AICORE_CLIENT_ID": "YOUR_AICORE_CLIENT_ID",

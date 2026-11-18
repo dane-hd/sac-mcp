@@ -21,6 +21,9 @@ ENV SAC_BASE_URL=""
 ENV SAC_TOKEN_URL=""
 ENV SAC_CLIENT_ID=""
 ENV SAC_CLIENT_SECRET=""
+ENV SAC_REDIRECT_URI="http://localhost:8765/callback"
+# Browser SSO sign-in listens on loopback inside the process, so it only
+# works when the server runs natively next to a browser, not in this container.
 
 # Start the server
 CMD ["node", "build/index.js"]

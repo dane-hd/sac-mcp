@@ -14,6 +14,7 @@ import { registerMonitoringTools } from "./monitoring.js";
 import { registerSchedulePublicationTools } from "./schedule-publication.js";
 import { registerTranslationTools } from "./translation.js";
 import { registerSmartQueryTool } from "./smart-query.js";
+import { registerAuthTools } from "./auth.js";
 
 export function registerTools(server: McpServer): void {
   // ── Connectivity check ──────────────────────────────────────────
@@ -25,6 +26,9 @@ export function registerTools(server: McpServer): void {
       content: [{ type: "text" as const, text: "pong" }],
     }),
   );
+
+  // ── Per-user SSO sign-in ────────────────────────────────────────
+  registerAuthTools(server);
 
   // ── SAC API tool modules ────────────────────────────────────────
   registerContentTools(server);

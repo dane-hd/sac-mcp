@@ -1,5 +1,5 @@
 {
-  "name": "sap-analytics-cloud-mcp",
+  "name": "sac-mcp",
   "version": "0.1.0",
   "description": "MCP Server for SAP Analytics Cloud",
   "type": "module",

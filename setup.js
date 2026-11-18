@@ -27,8 +27,9 @@ const config = {
             "env": {
                 "SAC_BASE_URL": "https://YOUR_TENANT.YOUR_DC.sapanalytics.cloud",
                 "SAC_TOKEN_URL": "PASTE_TOKEN_URL_FROM_SAC_ADMIN_APP_INTEGRATION",
-                "SAC_CLIENT_ID": "YOUR_OAUTH_CLIENT_ID",
-                "SAC_CLIENT_SECRET": "YOUR_OAUTH_CLIENT_SECRET"
+                "SAC_CLIENT_ID": "YOUR_AUTHORIZATION_CODE_OAUTH_CLIENT_ID",
+                "SAC_CLIENT_SECRET": "YOUR_OAUTH_CLIENT_SECRET",
+                "SAC_REDIRECT_URI": "http://localhost:8765/callback"
             }
         }
     }
@@ -42,3 +43,4 @@ console.log(`Server path set to: \x1b[36m${buildPath}\x1b[0m`);
 console.log(`\nNext steps:`);
 console.log(`1. Edit \x1b[1mmcp_config.json\x1b[0m to add your SAC credentials.`);
 console.log(`2. Copy the content to your Claude Desktop config.`);
+console.log(`3. Sign in once with SSO: [1mnode ${buildPath} login[0m`);
